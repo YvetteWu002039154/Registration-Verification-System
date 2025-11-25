@@ -4,9 +4,18 @@ import pandas as pd
 from datetime import datetime
 import os
 import json
+from pathlib import Path
 import numpy as np
 
 from app.utils.google_utils import append_record, update_record, find_records
+
+project_root = Path(__file__).resolve().parents[2]
+
+path = project_root / "data" / "registration_data.csv"
+
+# ensure parent directory exists
+path.parent.mkdir(parents=True, exist_ok=True)
+cfg = {"path": path}
 
 def save_to_db(collection_name: str, data: dict) -> dict:
     """
@@ -38,7 +47,6 @@ def add_to_csv(data: dict):
     Returns:
        A pandas DataFrame containing the new row or False.
     """
-    cfg = current_app.db
     csv_path = cfg.get("path")
 
     if not csv_path or not os.path.exists(os.fspath(csv_path)):
@@ -89,7 +97,6 @@ def update_to_csv(data: dict, match_column: list[str], match_value: list) -> boo
     Returns:
         bool: True on success, False on missing CSV path or I/O errors.
     """
-    cfg = current_app.db
     csv_path = cfg.get("path")
     if not csv_path or not os.path.exists(os.fspath(csv_path)):
         print("❌ CSV path missing or file does not exist")
@@ -167,7 +174,6 @@ def get_from_csv(match_column: list[str], match_value:list):
     Returns:
         dict | None: The matching record as a dictionary, or None if not found.
     """
-    cfg = current_app.db
     csv_path = cfg.get("path")
     if not csv_path or not os.path.exists(os.fspath(csv_path)):
         print("❌ CSV path missing or file does not exist")

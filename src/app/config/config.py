@@ -91,25 +91,5 @@ class Config:
     GOOGLE_SPREADSHEET_ID = os.getenv('GOOGLE_SPREADSHEET_ID')
     GOOGLE_WORKSHEET_NAME = os.getenv('GOOGLE_WORKSHEET_NAME')
 
-    @classmethod
-    def validate_required(cls) -> None:
-        """
-        Validates that all required environment variables are set as class attributes.
-
-        Checks for the presence of the following required environment variables
-
-        Raises:
-            RuntimeError: If any of the required environment variables are missing, 
-            listing the names of the missing variables.
-        """
-        required_vars = [
-            'AWS_ACCESS_KEY',
-            'AWS_SECRET_KEY',
-            'S3_BUCKET_NAME',
-            'S3_FILE_KEY',
-            'ADMIN_EMAIL_USER',
-            'ADMIN_EMAIL_PASSWORD'
-        ]
-        missing = [name for name in required_vars if not getattr(cls, name)]
-        if missing:
-            raise RuntimeError(f"Missing required config env vars: {', '.join(missing)}")
+   # OpenAI
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
