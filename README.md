@@ -1,495 +1,141 @@
+# Registration Verification System
 
-# Registration-Verification-System
+An AI-powered registration system that guides users through course selection, registration, PR card verification, and payment confirmation.
 
-Lightweight Flask-based backend for handling registration + payment verification workflows.
+## Features
 
-This repository provides a small MVC-style Flask application with:
-- modular structure (routes, services, background jobs, utils)
-- a google spreadsheet datastore for cloud development
-- a local/AWS OCR that checks Canada PR Card
-- an automated email module that send out notification
+- **AI Agent**: Powered by LangChain and LangGraph to handle conversational flows.
+- **Identity Verification**: Validates Canadian Permanent Resident (PR) cards.
+- **Payment Verification**: Checks for payment confirmation (simulated via email/database).
+- **Interactive UI**: The backend drives the frontend UI state (forms, uploads, etc.).
 
-## System Flowchart
+## Setup
 
-![System Flowchart](png/Phase2-Flowchart.png)
+1.  **Prerequisites**:
+    - Python 3.9
+    - `uv` (Python package manager)
 
-![TechStack Flowchart](png/TechStack.png)
-Interactive flowchart (Miro): https://miro.com/app/board/uXjVJo_6ibs=/?share_link_id=487025967242
+2.  **Installation**:
+    ```bash
+    uv sync
+    ```
 
+3.  **Configuration**:
+    - Ensure you have a `.env` file or environment variables set for `OPENAI_API_KEY`.
 
-## Quick overview
+4.  **Run the Server**:
+    ```bash
+    uv run python src/main.py
+    ```
+    The server will start at `http://localhost:5050`.
 
-- Project root: contains `pyproject.toml`, `.env.example`, and this `README.md`.
-- Application package: `src/app/` (contains config, routes, services, background jobs).
-- Entrypoint: `src/main.py` (creates/starts the Flask app).
+## API Documentation
 
-## Recommended Python
+### 1. Chat Endpoint
 
-Use Python 3.9 (the codebase uses modern type union syntax and other features). 
+**Endpoint**: `POST /api/chat`
 
-## Layout (important files)
+Handles all user interactions with the AI agent.
 
-```
-Registration-Verification-System/
-├── .env.example                      # example env with placeholders
-├── pyproject.toml
-├── png/
-│   ├── Phase1-Flowchart.png
-│   └── Phase2-Flowchart.png
-├── src/
-│   ├── main.py                       # application entrypoint
-│   └── app/
-│       ├── __init__.py               # create_app factory
-│       ├── background/
-│       │   └── payment_watcher.py     # scheduled payment email watcher
-│       ├── config/
-│       │   └── config.py              # Config class (loads .env)
-│       ├── extensions/
-│       │   └── mail.py                # helper to send emails
-│       ├── models/
-│       ├── routes/
-│       ├── services/
-│       ├── templates/
-│       └── utils/
-└── data/
-	├── registration_data.csv         # CSV store (created/loaded automatically)
-	└── image/
-		└── PR Card/
+**Request Body (JSON):**
+
+```json
+{
+  "message": "User's text input",
+  "session_id": "unique-session-id",
+  "current_step": "OPTIONAL_STATE_TRACKER",
+  "image_url": "http://localhost:5050/uploads/image.jpg"
+}
 ```
 
-## Setup (local development)
-
-1. Clone the repo and cd into it.
-
-2. Quick run with `uv` (fast, minimal) (Ignore this step if you choose run step 3)
-
-If you prefer a very short workflow and already have the `uv` runner available on your machine, you can use it to sync environment and run the app quickly:
-
-```bash
-# sync dependencies / environment (if your uv setup supports it)
-uv sync
-```
-
-Note: `uv` is optional — if you don't have it or prefer a more explicit setup, use one of the normal workflows below.
-
-3. Standard workflows (recommended) (Ignore this step if you choose run step 2)
-
-- Create and activate a virtual environment (recommended):
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
-```
-
-- Install dependencies.
-
-If you use Poetry (project has `pyproject.toml`):
-
-```bash
-poetry install
-poetry shell
-```
-
-Or with pip (if you maintain a `requirements.txt`) you can do:
-
-```bash
-# optional: create requirements.txt from poetry if needed
-pip install -r requirements.txt
-```
-
-4. Copy and fill the environment file:
-
-```bash
-cp .env.example .env
-# then edit .env and set real secrets (do NOT commit .env)
-```
-
-The code loads `.env` from the repository root using python-dotenv. The `Config` class in `src/app/config/config.py` exposes those env values as attributes.
-
-## Running the app
-
-Run directly with Python (recommended during development):
-
-```bash
-python src/main.py
-```
-
-If you use the `uv` runner you previously used:
-
-```bash
-uv run python src/main.py
-```
-
-Visit http://127.0.0.1:5050 (or the host/port from your `.env`) to see the landing endpoint.
-
-## Configuration
-
-- Edit `.env` (copy from `.env.example`) and fill required values: MongoDB creds (if used), AWS/S3 keys (if used), admin email.
-- `src/app/config/config.py` provides a `Config` class that reads env vars and offers `Config.validate_required()` to fail fast on missing required keys.
-
-
-Additional configuration variables
-- `JOTFORM_API_KEY` - (optional) API key used when fetching image URLs hosted by JotForm. When present the utility will append it as `?apiKey=...` to JotForm URLs.
-
-
-## Data storage (Google Sheets or CSV)
-
-- Default local development originally used a CSV-backed datastore (`data/registration_data.csv`) managed by `app.services.database`. You can continue using a local CSV, however this project also supports using Google Sheets as the primary backing store for local development and lightweight deployments.
-
-- Google Sheets is useful when you want a simple, shareable spreadsheet UI instead of opening the CSV file directly. When enabled the app will read/write rows to a Google Sheet and mirror many CSV behaviors (case-insensitive headers, empty-cell matching).
-
-How to choose:
-
-- CSV (local): keep using `data/registration_data.csv` — no external services required. Ensure `data/` exists.
-- Google Sheets: recommended for collaborative local testing and when you prefer a sheet UI. The instructions below show how to enable Sheets and configure credentials.
-- Change root __init__.py file ```app.db``` is equal to ```init_csv()``` or ```init_google_sheet()```.
-## Google Sheets setup (GCP) — replace local CSV with a Sheet
-
-Follow these steps to enable Google Sheets for local development and to let the app read/write registration rows directly to a sheet.
-
-1) Create a Google Cloud project (or use an existing one)
-	- Visit https://console.cloud.google.com/ and create/select a project.
-
-2) Enable APIs
-	- Enable the "Google Sheets API" (and optionally the "Google Drive API" if you plan to manage file permissions programmatically).
-
-3) Create a service account
-	- IAM & Admin → Service Accounts → Create Service Account
-	- Give it a descriptive name (e.g. "reg-verif-sheets-sa").
-
-4) Create and download a JSON key
-	- In the service account page, create a new key (JSON) and download it.
-	- IMPORTANT: keep this file private. DO NOT commit it to git.
-
-5) Place the key into the repository (for local development only)
-	- Put the downloaded JSON into the project at `src/data/key/credentials.json` (or update the path below if you prefer another location).
-	- Example (do NOT run this in CI or commit the file):
-
-```bash
-# copy credentials locally (example)
-mkdir -p src/data/key
-cp /path/to/downloaded-key.json src/data/key/credentials.json
-```
-
-6) Set environment variables
-	- In your `.env` file set the following values:
-
-```text
-# Google Sheets
-GOOGLE_SPREADSHEET_ID=your_google_sheet_id_here
-GOOGLE_WORKSHEET_NAME=your_google_sheet_name_here
-```
-
-* Note:
-	If your Google Sheet URL looks like this:
-
-	https://docs.google.com/spreadsheets/d/**12345-AbCdEfGhIjKlMnOpQrStUvWzYx**/edit#gid=0
-
-	The Google Sheet ID is: 12345-AbCdEfGhIjKlMnOpQrStUvWzYx
-
-7) Share the spreadsheet with the service account
-	- Open your Google Sheet in the browser.
-	- Click "Share" and add the `client_email` value from your `credentials.json` (it looks like `your-sa-name@project-id.iam.gserviceaccount.com`) as an Editor. This grants the service account permission to read/write the sheet.
-
-8) Confirm scopes
-	- The app requests at least the `https://www.googleapis.com/auth/spreadsheets` scope. If you enabled Drive API, include `https://www.googleapis.com/auth/drive` when creating credentials or in your code's scope list.
-
-9) Run the app
-	- With credentials present and the sheet shared, start the app normally. The app's initialization will load the credentials (from `GOOGLE_APPLICATION_CREDENTIALS`) and open the sheet by `SHEET_ID`.
-
-Security notes
-	- Never commit service account keys to git. Add `src/data/key/credentials.json` to `.gitignore`.
-	- Rotate/delete keys immediately if they are accidentally committed or leaked.
-	- For CI or production, use secret managers (GitHub Actions secrets, GCP Secret Manager, etc.) or mount the key at runtime rather than storing it in repository source.
-
-## Background jobs
-
-The system uses Google Script to call payment_service and reminder_service daily.
-
-## Routes
-
-All application routes are registered under the `/api` prefix. The main endpoints are:
-
-- POST /api/jotform-webhook
-	- Description: Receive JotForm Webhook, structured as URL-encoded key-value pairs in the body of the HTTP POST request.
-	- Query params (required): `pr_amount` (float), `normal_amount` (float)
-	- Returns: JSON with `registration` (processed registration details) and `identification` (The result of checking PR Card) .
-	- Example:
-
-		```bash
-		curl -X POST "http://127.0.0.1:5050/api/jotform-webhook?pr_amount=150&normal_amount=100" \
-		-H "Content-Type: application/x-www-form-urlencoded" \
-		--data-urlencode "rawRequest={
-			'slug': '/253056105937053',
-			'q6_legalName': {'first': 'YuYing', 'last': 'Wu3'},
-			'q8_email': 'yuying.wu@example.com',
-			'q9_phoneNumber': {'full': '+1 647 123 4567'},
-			'q26_payersName': {'first': 'YuYing', 'last': 'Wu'},
-			'q29_areYou': 'Yes I am',
-			'q11_prCard': '0000-0000',
-			'clearFront': ['https://files.jotform.com/uploads/example_front_card.jpg'],
-			'course': {'products': [{'productName': 'Standard First Aid with CPR Level C & AED Certification'}]}
-		}"
-		```
-
-- POST /api/registration-webhook
-	- Description: Receives Course Registration submissions. Expects JSON body.
-	- Query params (required): `pr_amount` (float), `normal_amount` (float)
-	- Returns: JSON with `message` and `result` (processed registration details).
-	- Example:
-
-		```bash
-		curl -X POST "http://127.0.0.1:5050/api/registration-webhook?pr_amount=150&normal_amount=100" \
-			-H "Content-Type: application/json" \
-			-d '{
-			"slug": "/253056105937053",
-			"q6_legalName": {
-			"first": "YuYing",
-			"last": "Wu3"
-			},
-			"q8_email": "yuying.wu@example.com",
-			"q9_phoneNumber": {
-			"full": "+1 647 123 4567"
-			},
-			"q26_payersName": {
-			"first": "YuYing",
-			"last": "Wu"
-			},
-			"q29_areYou": "Yes I am",
-			"q11_prCard": "0000-0000",
-			"clearFront": [
-			"https://files.jotform.com/uploads/example_front_card.jpg"
-			],
-			"course": {
-				"products": [
-					{
-						"productName": "Standard First Aid with CPR Level C & AED Certification"
-					}
-				]
-			}
-		}'
-		```
-
-- POST /api/check-payments
-	- Description: Trigger a scan of incoming payment notification email(Zeffy) body and attempt to match corresponding payment to a registration record. When a matching registration is found the service will try to update the backing store (Google Sheet or local CSV) and — depending on the result — send client and/or staff notification emails.
-	- Payload:
-	  - `id`  (Email ID to of Zeffy payment notifications.)
-	  - `subject` (Subject line of Zeffy payment notifications.)
-	  - `body` (Body of the email.)
-	- Returns: A dictionary containing payment information extracted from the email.
-		
-	- Example:
-
-		```bash
-		curl -X POST "http://127.0.0.1:5050/api/check-payments" \
-			-H "Content-Type: application/json" \
-			-d '{
-			"id": "253056105937053",
-			"subject": "New Purchase",
-			"body": "Dear Customer"
-			}'
-		```
-- GET /api/payment-reminders
-	- Description: Trigger sending payment reminder emails to registrants who have not completed payment. The endpoint runs the reminder workflow which locates unpaid registrations and sends a client-facing reminder email.
-	- Response: JSON `{ count: int, results: List[object] }`
-		- `count`: number of reminders processed.
-		- `results`: array of result objects with fields such as:
-
-	- Example:
-
-		```bash
-		curl "http://127.0.0.1:5050/api/payment-reminders"
-		```
-
-- POST /api/check-identification
-	- Description: Submit an image for PR Card. The endpoint currently expects a JSON body with an `image_url` pointing to the image to analyze. The service will fetch the image, run OCR and heuristics, and return an identification result.
-	- Body (application/json):
-		- `image_url` (string, required) — public URL pointing to the image to analyze. Example values: a direct image link (`https://.../image.jpg`) or a hosting URL that contains an `<img>` tag (the helper will extract the first image found).
-		- `registration_data` (json) - course registration detail, only if match return valid result
-			- `Full_Name` (required)
-			- `PR_Card_Number` (required)
-			- `Phone_Number`
-			- `Email`
-			- `Form_ID`
-			- `Submission_ID`
-			- `Course`
-	- Returns: JSON representation of the `IdentificationResult` dataclass with the following fields:
-		- `doc_type` (array of string): candidate document types detected (e.g. `["PR_CARD"]`).
-		- `is_valid` (boolean): whether the document is considered a valid match.
-		- `confidence` (float): confidence score between 0.0 and 1.0.
-		- `reasons` (array of string): human-readable reasons / cues used for the decision.
-		- `raw_text` (array of string): OCR-extracted text lines / tokens used by the heuristics.
-	- Example request (curl):
-
-		```bash
-		curl -X POST "http://127.0.0.1:5050/api/check-identification" \
-		-H "Content-Type: application/json" \
-		-d '{"image_url": "https://example.com/path/to/document.jpg"}'
-		```
-
-	- Example response (200):
-
-	```json
-	{
-	"doc_type": ["PR_CARD"],
-	"is_valid": true,
-	"confidence": 0.78,
-	"reasons": ["PR Card Check confidence is higher than the threshold."],
-	"raw_text": ["canada", "permanent", "resident", "name", "doe, jane"]
-	}
-	```
-
-## Image utilities & OCR
-
-The helpers in `src/app/utils/image_utils.py` are small, composable building blocks used in sequence depending on your input source (URL or local file). They handle HTML pages that embed images, convert image bytes to OpenCV arrays, and provide both local (Tesseract) and remote (Ninja OCR) OCR paths.
-
-Typical workflows
-
-- URL → remote OCR
-  1. Call `get_image(source='URL', imgURL=...)` downloads image bytes and use the module's `bytes_to_cv2` helper to convert bytes to an OpenCV ndarray. If the URL returns HTML, the helper extracts the first `<img>` and follows it. If `JOTFORM_API_KEY` is set it will be appended to JotForm-hosted URLs.
-  2. Preprocess/crop with `image_preprocess` to do edge detection and grayscale.
-  3. Call `ninja_image_to_text(image_or_bytes)` to send the image to the remote OCR endpoint (requires `NINJA_API_KEY`).
-
-- URL → local OCR (Tesseract)
-  1. Load with `get_image(source='PATH', imgPath=...)`.
-  2. Preprocess/crop with `image_preprocess` to do edge detection and grayscale.
-  3. Call `local_image_to_text(image_array)` which uses `pytesseract` for OCR.
-
-Notes
-- `ninja_image_to_text` accepts a NumPy ndarray, raw bytes, or a PIL Image — it encodes to JPEG before sending to the remote API. Ensure `NINJA_API_KEY` is set in `.env` when using the remote service.
-
-Dependencies
-- These helpers use the following third-party packages; ensure they are installed in your environment (they are listed in `pyproject.toml`):
-	- `requests` — HTTP requests
-	- `beautifulsoup4` (`bs4`) — HTML parsing
-	- `pillow` (`PIL`) — image decoding/fallback
-	- `numpy` — array / ndarray handling
-	- `opencv-python` (imported as `cv2`) — image processing and computer vision
-	- `pytesseract` — Python wrapper for the Tesseract OCR engine
-	- `gspread` - Google Sheet
-
-Additional system dependency:
-- Tesseract OCR binary (required by `pytesseract`). Install on macOS with `brew install tesseract` or on Debian/Ubuntu with `sudo apt install tesseract-ocr`.
-
-# 📧 Automated Notification Reference Guide
-
-This guide outlines the automated email notifications generated by the webhook processing system, providing context and next steps for operational staff and clients.
-
-
-## 🧑‍💻 Staff Notifications (Action & Review Required)
-
-These notifications alert staff to system failures, payment discrepancies, or validation errors.
-
-### 1. System/Database Errors
-
-| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **1.1** | **Manual Review: Failed to Save Registration Data** | 🚨 | JotForm data failed to save to the database. | Confirm database availability and connection. | ★★★ |
-
-### 2. Payment Matching Errors (Zeffy)
-
-| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **2.1** | **Manual Review Required for Zeffy Payment Checking: Extraction Failed** | ❌ | Cannot Extract Full Name and Paid Amount Information from the email. | Go to mailbox; Manually check the mail content and update the database and manually send out registration notification. | ★★ |
-| **2.2** | **Manual Review Required for Zeffy Payment Checking: Multiple or No Records Found** | 📧  | System failed to locate the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. | Manually search the database using "Full\_Name" and "Course" to resolve the ambiguity. Need to manually send out registration notification after clear the issue. | ★★ |
-| **2.3** | **Manual Review Required for Zeffy Payment Checking: Payment Amount Mismatch** | 💰 | Actual payment $\neq$ Expected amount. Payer was successfully notified of cancellation. | Go to database; verify **`Amount_of_Payment`** vs. **`Actual_Paid_Amount`**. Await client repayment. The system will automatically resend registration notification after then. | ★ |
-| **2.2** | **Manual Review Required for Zeffy Payment Checking: Update Database Failed** | 📧 | System failed to update the database record. Possible issues: zero matches or multiple matches for the "Full\_Name" and "Course" combination. |  Manually check other contact information (phone, etc.) to inform the client of the payment cancellation. Need to manually send out registration notification after clear the issue. | ★★ |
-| **2.4** | **Manual Review Required for Zeffy Payment Checking: Exception Occurred** | ❓ | An unknown error occurred during the Zeffy payment verification process. | N/A (Contact IT). | ★★★ |
-
-### 3. PR Card Verification Errors (OCR)
-
-| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **5.1** | **PR Card Check Confidence HIGH** | ✅ | OCR confidence score for the PR Card is above the acceptance threshold, proving it's a real PR card. | None. The card is implicitly approved. | ★ |
-| **5.2** | **Review: Hand-Written Note Detected** | ✍️ | OCR detected minimal structured text; the upload is likely a hand-written note or a heavily processed image. | Manually check the uploaded PR Card file. | ★★ |
-| **5.3** | **Review: Driver’s Licence Cues Detected** | 🚫 | OCR detected features consistent with a driver’s licence instead of a PR Card. | Manually check the uploaded file to confirm the document type. | ★★ |
-| **5.4** | **Review: Low PR Card Keyword Confidence** | ❓ | The confidence score for identifying the image as a PR Card is below the threshold. | Manually check the uploaded file. | ★★ |
-| **5.5** | **Review: ID/Name Mismatch** | 🔀 | The name or ID number extracted from the PR Card image does not match the information entered in the registration form. | Manually verify the PR Card information against the form data in the database. | ★★ |
-| **5.6** | **Review: Cannot Extract ID Number** | 📸 | The uploaded image is too blurry, cropped, or dark to extract the ID number. | Manually check the uploaded file for clarity. | ★★ |
-| **5.7** | **Review: Failed to Update OCR Database** | 🔄 | System failed to update the database record after OCR, possibly due to a missing or duplicated record. | Manually check the database to resolve the record issue. | ★★ |
-| **5.8** | **Review: OCR - Other Error** | ❓ | An unknown error occurred during PR Card processing. | N/A (Contact IT). | ★★★ |
-
----
-
-## 4. Staff Notifications (Confirmation/Pending)
-
-These notifications are for staff awareness and require minimal to no immediate action.
-
-| Key | Subject | Emoji Key | Reason | Action Required | Difficulty |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **3.1** | **[\*Course Name\*] Registration Confirmed** | ✅ | Client's registration, identification, and payment are all confirmed and valid. | None. The process is complete. | ★ |
-| **4.1** | **[\*Course Name\*] OCR Validation Passed** | ✅ | PR client registered, and the PR Card OCR validation was successful. | Await payment confirmation. | ★ |
-| **4.2** | **[\*Course Name\*] No OCR Validation Needed** | ✅ | Non-PR client registered. | Await payment confirmation. | ★ |
-
----
-
-## 5. Client Notifications (Direct Feedback)
-
-These are the emails sent directly to the client.
-
-| Subject | Emoji Key | Reason & Key Message | Status |
-| :--- | :--- | :--- | :--- |
-| **Payment Reminders for: [\*Course Name\*] Course Registration** | 🚨 | The reminder for the course registration payment to secure your spot. | **Reminder** |
-| **Payment Discrepancy for Your Course Registration** | 🚨 | Your payment amount was **incorrect** and has been **cancelled**. Please review the course fees and make a new payment for the correct amount to secure your spot. | **Payment Failed** |
-| **Confirmation: Your Spot in [\*Course Name\*] is Secured!** | ✅ | All registration details and payment validations have passed. Your spot in the course is confirmed. | **Confirmed** |
-
-
-## Development tips & common troubleshooting
-
-- Python version: Use 3.9.
-- Missing `data` directory: create it or ensure `init_csv` runs (it attempts to create the parent path if needed).
-- Ensure `.env` is present in the project root when running locally. Use `.env.example` as a template.
-
-## 🚧 Future Edge Cases for Development
-
-The following issues represent limitations in the current system logic, primarily around course selection, date handling, and payment matching. Addressing these will significantly improve system robustness.
-
-### 1. Handling Course Quantity Selection
-
-| Current Limitation | Proposed Future Fix | Priority |
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| **Jotform allows clients to select a quantity (e.g., 2 spots)** for a single course via its product list, but the current webhook/database logic assumes **one registration record = one course.** The system cannot correctly track or process submissions for multiple spots/quantities. | **Implement Quantity Splitting Logic.** If the Jotform submission includes a quantity greater than one, the webhook processor must **automatically create and insert separate, distinct registration records** in the database (one for each spot purchased). The total payment amount must be correctly distributed or verified against the total quantity. | **High** |
+| `message` | string | The text message from the user. |
+| `session_id` | string | Unique identifier for the conversation thread. |
+| `current_step` | string | (Optional) Current state of the frontend (e.g., "GREETING", "FORM"). |
+| `image_url` | string | (Optional) URL of an uploaded image for the agent to analyze. |
 
----
+**Response (JSON):**
 
-### 2. Standardizing Course Name and Date for Matching
+```json
+{
+  "response": "The AI agent's text reply.",
+  "session_id": "unique-session-id",
+  "ui_action": "show_registration_form"
+}
+```
 
-| Current Limitation | Proposed Future Fix | Priority |
+| Field | Type | Description |
 | :--- | :--- | :--- |
-| **Course dates/options are treated separately** from the core course name in Jotform/Zeffy. The course date is not consistently included as a permanent part of the **Course Name** used for Zeffy payment matching, leading to ambiguous matching (e.g., distinguishing between "SFA - Nov 9" and "SFA - Dec 1"). | **Enforce Standardized Course Keys.** Modify the Jotform field and the regex logic to ensure the **Course Name** extracted **always includes the date or specific option** (e.g., `Standard First Aid (Nov 9)`). This composite key must be the exact value used for payment matching in the Zeffy notification and stored in the database. | **High** |
+| `response` | string | The text reply from the agent. |
+| `session_id` | string | The session ID (returned back). |
+| `ui_action` | string | A trigger for the frontend to show a specific widget. |
 
----
+**UI Actions:**
 
-### 3. Mismatched Dates Between Registration and Payment
+- `show_course_selector`: Display the list of available courses.
+- `show_registration_form`: Display the user registration form.
+- `show_upload`: Display the file upload widget (for PR cards).
+- `show_payment`: Display the payment input field.
+- `success_completion`: Show the success/completion screen.
 
-| Current Limitation | Proposed Future Fix | Priority |
-| :--- | :--- | :--- |
-| If a client registers for a course date via **Jotform (Date A)** but then manually selects a different date/product via **Zeffy (Date B)**, the final database record currently reflects **Date A** (the Jotform submission), creating a booking error. | **Payment-Driven Date Correction.** Implement logic to compare the registered course/date (from Jotform) with the final course/date identifier in the **Zeffy payment notification**. If a discrepancy exists, the system should **override the Jotform date** and update the database record to reflect the date selected during the **Zeffy payment process (Date B)**, as this confirms the client's final purchase intention. | **Medium** |
+### 2. File Upload Endpoint
 
----
+**Endpoint**: `POST /api/upload`
 
-### 4. Upload image orientation & format
+Uploads a file (e.g., PR card image) to the server.
 
-| Current Limitation | Proposed Future Fix | Priority |
-| :--- | :--- | :--- |
-| Uploaded PR card images may be portrait/rotated or submitted as PDFs, causing OCR and heuristic failures. | Enforce image-only uploads (reject PDFs) and require the card to be uploaded in landscape orientation with the Canadian flag / "Government of Canada" text positioned at the top. Add validation in the upload pipeline to: (1) reject non-image MIME types (e.g., application/pdf), (2) check image orientation (width >= height) and attempt auto-rotation using EXIF when possible, and (3) return a clear client-facing error instructing the user to upload a JPG/PNG image of the PR card in landscape orientation with the flag at the top if validation fails. | **High** |
+**Request (Multipart/Form-Data):**
 
----
+- `file`: The file object to upload.
 
-### 5. PR Confirmation Letter (NOT YET IMPLEMENTED)
+**Response (JSON):**
 
-| Current Limitation | Proposed Future Fix | Priority |
-| :--- | :--- | :--- |
-| The system does not yet process PR Confirmation Letters because business rules are unclear (for example: where/how the PR Card Number appears on the confirmation letter). | Defer implementation until business rules are clarified. When rules are provided, implement extraction heuristics (OCR + regex / field anchors) for the confirmation letter and map extracted fields to the registration record. Consider a staged approach: (1) collect sample confirmation-letter images from stakeholders, (2) derive reliable anchors or templates for locating the PR Card Number, (3) build and test OCR + post-processing rules, and (4) add automated validation and manual-review fallback. | Medium |
+```json
+{
+  "url": "http://localhost:5050/uploads/unique_filename.jpg"
+}
+```
 
-## Git / secrets
+## Backend Tools
 
-- This project includes a `.gitignore` which contains `.env` and local virtual environment directories. Do NOT commit `.env`.
-- Keep a cleaned `.env.example` in the repo with placeholder values so teammates know required keys.
+The AI agent utilizes several backend services to perform specific tasks. These tools are located in `src/app/tools/`.
 
-## Contributing
+### 1. Payment Extraction (`payment_extraction`)
+Extracts payment details from Zeffy confirmation emails.
 
-1. Create a branch: `git checkout -b feat/your-change`
-2. Commit and push, then open a PR wait for approve.
+- **File**: `src/app/tools/payment_service.py`
+- **Parameters**:
+    - `id` (str): The unique ID of the email.
+    - `subject` (str): The subject line of the email.
+    - `body` (str): The full body text of the email.
+- **Returns**: `dict` containing extracted payment information (e.g., amount, payer name) or an error status.
 
+### 2. Registration Extraction (`registration_extraction`)
+Processes raw registration data from the frontend form and prepares it for storage.
+
+- **File**: `src/app/tools/registration_service.py`
+- **Parameters**:
+    - `data` (dict): The raw user information dictionary (must contain keys like `legalName`, `email`, `course`, etc.).
+    - `pr_amount` (float): The course price for Permanent Residents.
+    - `normal_amount` (float): The standard course price.
+- **Returns**: `dict` containing the structured and validated registration record.
+
+### 3. Identification Service (`identification_service`)
+Validates Canadian Permanent Resident (PR) cards using OCR and visual analysis.
+
+- **File**: `src/app/tools/document_service.py`
+- **Parameters**:
+    - `image_url` (str): The URL of the uploaded PR card image.
+    - `register_info` (dict): User details (First Name, Last Name, PR Card Number) to cross-reference with the card.
+- **Returns**: `IdentificationResult` object (or dict) containing:
+    - `is_valid` (bool): Whether the card is valid.
+    - `message` (str): Validation message.
+    - `extracted_data` (dict): Data extracted from the card.
+
+### 4. Reminder Service (`reminder_nonpaid_email`)
+Identifies users who registered recently but have not yet completed payment.
+
+- **File**: `src/app/tools/reminder_service.py`
+- **Parameters**: None.
+- **Returns**: `list[dict]` containing records of unpaid registrations from the previous day.
