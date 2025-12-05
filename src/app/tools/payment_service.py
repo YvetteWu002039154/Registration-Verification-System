@@ -1,17 +1,11 @@
-from app.utils.imap_utils import send_email, \
-        create_inform_client_success_email_body, \
-        create_inform_client_payment_error_email_body, \
-        create_inform_staff_error_email_body, \
-        create_inform_staff_success_email_body
-from app.utils.database_utils import update_to_sheet, get_from_sheet
 
-from flask import current_app
-
+from app.utils.database_utils import update_to_csv, get_from_csv
+from app.config.config import Config
 import re
 from datetime import datetime
 from dateutil import parser
 
-def payment_service(id, subject, body) -> dict:
+def payment_extraction(id, subject, body) -> dict:
     '''
     Extract Zeffy payment-related email and store it in DB.
     Args:
@@ -30,21 +24,7 @@ def payment_service(id, subject, body) -> dict:
 
         # Scenario 1: Could not extract payment information
         if not payment_info or not payment_info.get("Actual_Paid_Amount") or not payment_info.get("Full_Name"):
-            info = {
-                "Form_ID": "",
-                "Submission_ID": "",
-                "Full_Name": payment_info.get("Full_Name"),
-                "Email": subject,
-                "Phone_Number": "",
-                "Error_Message": f"Failed to extract payment details."
-            }
-
-            send_email(
-                subject="Manual Review Required for Zeffy Payment Checking: Extraction Failed",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_error_email_body(info)
-            )
-
+            
             return {
                 "status": "error",
                 "message": f"Failed to extract payment details from email with subject: {subject}"
@@ -55,7 +35,7 @@ def payment_service(id, subject, body) -> dict:
         full_name = payment_info.get("Full_Name")
 
         # Fetch with the payer full name and not yet marked as paid -> Never paid before
-        rows = get_from_sheet(
+        rows = get_from_csv(
             match_column=[
                 "Full_Name", 
                 "Course", 
@@ -72,7 +52,7 @@ def payment_service(id, subject, body) -> dict:
         
         if not rows:
             # Fetch with the payer full name and marked as paid but payment status is False -> Paid before but need to correct the amount and repaid again
-            rows = get_from_sheet(
+            rows = get_from_csv(
                 match_column=[
                     "Full_Name", 
                     "Course", 
@@ -91,24 +71,9 @@ def payment_service(id, subject, body) -> dict:
 
         if not rows or len(rows) != 1:
 
-            info = {
-                "Form_ID": "",
-                "Submission_ID": "",
-                "Full_Name": full_name,
-                "Email": subject,
-                "Phone_Number": "",
-                "Error_Message": f"There are total {len(rows) if rows else 0} records found for {full_name}, manual review needed."
-            }
-
-            send_email(
-                subject="Manual Review Required for Zeffy Payment Checking: Multiple or No Records Found",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_error_email_body(info)
-            )
-
             return {
                 "status": "error",
-                "message": f"Failed to update database from email with subject: {subject}"
+                "message": f"Failed to fetch database from email with subject: {subject}"
             }
 
         # Step 3: Verify the payment amount
@@ -121,37 +86,8 @@ def payment_service(id, subject, body) -> dict:
             # Step 4: Notify the staff and the client when the payment amount is not correct
             payment_info['Payment_Status'] = False
 
-            info = {
-                "Expected Amount": target_amount,
-                "Actual Paid Amount": actual_amount,
-                "Full_name": full_name,
-                "Course": rows[0].get("Course"),
-                "Payment Link": rows[0].get("Payment_Link"),
-                "Support Contact": current_app.config.get("CFSO_ADMIN_EMAIL_USER") if rows[0].get("PR_Status") else current_app.config.get("UNIC_ADMIN_EMAIL_USER")
-            }
-            send_email(
-                subject="Payment Discrepancy for Your Course Registration",
-                recipients=[rows[0].get("Email")],
-                body=create_inform_client_payment_error_email_body(info)
-            )
-
-            info = {
-                "Form_ID": "",
-                "Submission_ID": "",
-                "Full_Name": full_name,
-                "Email": subject,
-                "Phone_Number": "",
-                "Error_Message": f"The payment amount ${actual_amount} does not match the expected amount ${target_amount} , manual review needed. Already inform the payer we will cancel the payment."
-            }
-
-            send_email(
-                subject="Manual Review Required for Zeffy Payment Checking: Payment Amount Mismatch",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_error_email_body(info)
-            )
-
         # Step 5: Update the database record
-        update_success = update_to_sheet(
+        update_success = update_to_csv(
             payment_info, 
             match_column=[
                 "Full_Name", 
@@ -165,7 +101,7 @@ def payment_service(id, subject, body) -> dict:
                 rows[0].get("Course_Date"), 
                 ""
             ]
-        ) or update_to_sheet(
+        ) or update_to_csv(
                 payment_info,
                 match_column=[
                     "Full_Name", 
@@ -185,91 +121,22 @@ def payment_service(id, subject, body) -> dict:
 
         if not update_success:
 
-            info = {
-                "Form_ID": "",
-                "Submission_ID": "",
-                "Full_Name": full_name,
-                "Email": subject,
-                "Phone_Number": "",
-                "Error_Message": f"Failed to update database record, manual review needed, it may be a missing or multiple full name match in database."
+           return {
+                "status": "error",
+                "message": f"Failed to update database from email with subject: {subject}"
             }
-
-            send_email(
-                subject="Manual Review Required for Zeffy Payment Checking: Update Database Failed",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_error_email_body(info)
-            )
-
- 
-        # Step 6: Send notification email to client if all info validated
-
-        final_rows = get_from_sheet(
-            match_column=[
-                "Full_Name", 
-                "Course",
-                "Course_Date", 
-                "Paid",
-                "Payment_Status",
-                "Created_At",
-                "PR_Status",
-                "PR_Card_Valid"
-            ],
-            match_value=[
-                full_name, 
-                rows[0].get("Course"), 
-                rows[0].get("Course_Date"), 
-                True,
-                True, 
-                rows[0].get("Created_At"),
-                rows[0].get("PR_Status"),
-                True if rows[0].get("PR_Status") else ""
-            ]
-        )
-        print(f"Final rows: {final_rows}")
-
-        if final_rows and len(final_rows) == 1:
-            info = {
-                "Form_ID": final_rows[0].get("Form_ID", ""),
-                "Submission_ID": final_rows[0].get("Submission_ID", ""),
-                "Full_Name": final_rows[0].get("Full_Name", ""),
-                "Email": final_rows[0].get("Email", ""),
-                "Phone_Number": final_rows[0].get("Phone_Number", ""),
-                "Course": final_rows[0].get("Course", ""),
-                "Support Contact": current_app.config.get("CFSO_ADMIN_EMAIL_USER") if final_rows[0].get("PR_Status") else current_app.config.get("UNIC_ADMIN_EMAIL_USER"),
+        
+        if payment_info['Payment_Status'] is False:
+            return {
+                "status": "partial",
+                "message": f"Payment amount {actual_amount} is less than required {target_amount} for email with subject: {subject}"
             }
-
-            send_email(
-                subject=f"{final_rows[0].get('Course')} Registration Confirmation: ALL Validation Passed Successfully!",
-                recipients=[final_rows[0].get("Email", "")],
-                body= create_inform_client_success_email_body(info)
-            )
-
-            send_email(
-                subject=f"{final_rows[0].get('Course')} Registration Confirmation: ALL Validation Passed Successfully!",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_success_email_body(info)
-            )
-
+        
         return {
             "status": "success",
             "message": "Payment processed successfully."
         }
     except Exception as e:
-
-        info = {
-                "Form_ID": "",
-                "Submission_ID": "",
-                "Full_Name": "",
-                "Email": subject,
-                "Phone_Number": "",
-                "Error_Message": f"Error in payment_service: {str(e)}"
-            }
-
-        send_email(
-            subject="Manual Review Required for Zeffy Payment Checking: Exception Occurred",
-            recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-            body=create_inform_staff_error_email_body(info)
-        )
         
         return {
             "status": "error",

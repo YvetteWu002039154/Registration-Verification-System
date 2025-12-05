@@ -1,8 +1,7 @@
-from flask import current_app
 from app.utils.extraction_tools import extract_form_id, extract_submission_id
-from app.utils.database_utils import add_to_sheet
+from app.utils.database_utils import add_to_csv
 from app.utils.file_utils import process_file_uploads
-from app.utils.imap_utils import create_inform_staff_error_email_body, send_email
+
 import re
 from datetime import datetime
 
@@ -15,7 +14,7 @@ def _get_value_by_partial_key(data_dict, partial_key):
             
     return None
 
-def registration_service(data, pr_amount, normal_amount):
+def registration_extraction(data, pr_amount, normal_amount):
     """
     Processes the request data and returns structured information.
 
@@ -108,25 +107,11 @@ def registration_service(data, pr_amount, normal_amount):
         submission_id = extract_submission_id(pr_file_upload_urls)
         registration_data['Submission_ID'] = submission_id
     # Store extracted data into app database
-    csv_data = add_to_sheet(registration_data)
+    csv_data = add_to_csv(registration_data)
     if csv_data is None or csv_data is False or (hasattr(csv_data, "empty") and csv_data.empty):
-
-        info = {
-                "Form_ID": form_id,
-                "Submission_ID": submission_id,
-                "Full_Name": full_name,
-                "Email": email,
-                "Phone_Number": phone_number,
-                "Error_Message": "Failed to save registration data"
-            }
-        
-        send_email(
-                subject="Manual Review Required for Registration Verification",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_error_email_body(info)
-            )
         
         return {"status": "error", "message": "Failed to save registration data"}
+    
     registration_data["Created_At"] = csv_data.loc[csv_data.index[0], 'Created_At']
-    return registration_data
+    return {"status": "success", "message": "Registration data saved successfully", "data": registration_data}
 

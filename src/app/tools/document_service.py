@@ -1,13 +1,10 @@
 import re
 from typing import Dict, List, Any
 
-from flask import current_app
-
 from app.models import IdentificationResult
-from app.utils.image_utils import ninja_image_to_text, local_image_to_text,get_image,normalize
+from app.utils.image_utils import  local_image_to_text,get_image
 from app.utils.aws_utils import AWSService
-from app.utils.database_utils import update_to_sheet
-from app.utils.imap_utils import send_email,create_inform_staff_error_email_body
+from app.utils.database_utils import update_to_csv
 # ------------------------------------------------------------
 # Thresholds
 # ------------------------------------------------------------
@@ -236,7 +233,7 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
         identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
 
         card_info = _get_pr_card_verified_info(valid, keyword_confidence, reasons)
-        update_success = update_to_sheet(
+        update_success = update_to_csv(
             card_info, 
             match_column=["Full_Name","PR_Card_Number","Course","Course_Date","Paid"], 
             match_value=[full_name,card_number,course,course_date,""])
@@ -246,59 +243,11 @@ def identification_service(image_url: str, register_info: dict) -> Identificatio
             reasons.append("Failed to update the database; Maybe no or several columns are found. Manual review required.")
 
         if notify_manually_check:
-            formatted_reasons = "\n".join(reasons)
-
-            error_message = f"The error happened because OCR recognition failed with the following reasons:\n{formatted_reasons}"
-            
-            info = {
-                "Form_ID": form_id,
-                "Submission_ID": submission_id,
-                "Full_Name": full_name,
-                "Email": email,
-                "Phone_Number": phone_number,
-                "Error_Message": error_message
-            }
-
-            send_email(
-                subject="Manual Review Required for PR Card Verification",
-                recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-                body= create_inform_staff_error_email_body(info)
-            )
-
-        result = {**identification_result.__dict__, "update_success": update_success, "PR_Card_INFO": id_info}
-        return result
+            return {"status":"error","message":"Manual review required.",**identification_result.__dict__}
+        
+        return {**identification_result.__dict__, "message":"Auto verification successful.", "status":"success"}
     except Exception as e:
         reasons += [str(e)]
         identification_result = IdentificationResult(reasons=reasons, doc_type=doc, is_valid=valid, confidence=keyword_confidence, raw_text=texts)
-        result = {**identification_result.__dict__, "update_success": False}
             
-        formatted_reasons = "\n".join(reasons)
-
-        error_message = f"The error happened because OCR recognition failed with the following reasons:\n{formatted_reasons}"
-        
-        info = {
-            "Form_ID": form_id,
-            "Submission_ID": submission_id,
-            "Full_Name": full_name,
-            "Email": email,
-            "Phone_Number": phone_number,
-            "Error_Message": error_message
-        }
-
-        send_email(
-            subject="Manual Review Required for PR Card Verification",
-            recipients=current_app.config.get("ERROR_NOTIFICATION_EMAIL"),
-            body= create_inform_staff_error_email_body(info)
-        )
-
-        raise RuntimeError(result) from e
-
-    # ✅ Confirmation of PR
-    '''if copr >= 2:
-        doc, valid = "PR_CONF_LETTER", True
-        conf = min(0.95, 0.6 + 0.1*copr)
-        reasons += [f"CoPR cues (score={copr})"]
-        if "uci" in fields: conf += 0.1; reasons.append("UCI/Client ID found")
-        if "doc_number" in fields: conf += 0.05; reasons.append("Document number found")
-        return IdentificationResult(doc, valid, min(conf, 0.98), reasons, fields, norm, ocr.tried_variants)'''
-
+        return {**identification_result.__dict__, "status": "error", "message":"Identification process failed."}

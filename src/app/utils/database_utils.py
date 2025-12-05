@@ -4,9 +4,17 @@ import pandas as pd
 from datetime import datetime
 import os
 import json
+from pathlib import Path
 import numpy as np
 
-from app.utils.google_utils import append_record, update_record, find_records
+
+project_root = Path(__file__).resolve().parents[2]
+
+path = project_root / "data" / "registration_data.csv"
+
+# ensure parent directory exists
+path.parent.mkdir(parents=True, exist_ok=True)
+cfg = {"path": path}
 
 def save_to_db(collection_name: str, data: dict) -> dict:
     """
@@ -38,7 +46,6 @@ def add_to_csv(data: dict):
     Returns:
        A pandas DataFrame containing the new row or False.
     """
-    cfg = current_app.db
     csv_path = cfg.get("path")
 
     if not csv_path or not os.path.exists(os.fspath(csv_path)):
@@ -89,7 +96,6 @@ def update_to_csv(data: dict, match_column: list[str], match_value: list) -> boo
     Returns:
         bool: True on success, False on missing CSV path or I/O errors.
     """
-    cfg = current_app.db
     csv_path = cfg.get("path")
     if not csv_path or not os.path.exists(os.fspath(csv_path)):
         print("❌ CSV path missing or file does not exist")
@@ -167,7 +173,6 @@ def get_from_csv(match_column: list[str], match_value:list):
     Returns:
         dict | None: The matching record as a dictionary, or None if not found.
     """
-    cfg = current_app.db
     csv_path = cfg.get("path")
     if not csv_path or not os.path.exists(os.fspath(csv_path)):
         print("❌ CSV path missing or file does not exist")
@@ -198,93 +203,3 @@ def get_from_csv(match_column: list[str], match_value:list):
         return None
 
     return match_rows.to_dict(orient='records')
-
-def add_to_sheet(data: dict):
-    """
-    Append a single record to the Google Sheet defined in current_app.db.
-
-    Args:
-        The data to be saved or false boolean indicating exception.  
-    """
-    cfg = current_app.db
-    sheet = cfg.get("sheet")
-    headers = cfg.get("headers")
-
-    try:
-       new_row = append_record(sheet, headers, data)
-    except Exception as e:
-        print(f"❌ Failed to append record to Google Sheet: {e}")
-        return False
-    if not new_row:
-        return False
-    
-    new_row = pd.DataFrame([new_row], columns=headers)
-    
-    return new_row
-
-def update_to_sheet(data: dict, match_column: list[str], match_value: list) -> bool:
-    """
-    Update a record in the Google Sheet defined in current_app.db.
-
-    Args:
-        data (dict): Fields to update.
-        match_column (list[str]): Column names to match (case-insensitive).
-        match_value (list): Values to match in the match_column.
-
-    Returns:
-        bool: True on success, False on missing sheet or I/O errors.
-    """
-    cfg = current_app.db
-    sheet = cfg.get("sheet")
-    headers = cfg.get("headers")
-
-    if not sheet or not headers:
-        print("❌ Google Sheet or headers missing in configuration")
-        return False
-
-    try:
-        updated = update_record(sheet, headers, match_column, match_value, data)
-        if not updated:
-            print(f"❌ No matching record found for {match_column} = {match_value}")
-            return False
-    except Exception as e:
-        print(f"❌ Failed to update record in Google Sheet: {e}")
-        return False
-    
-    return True
-
-def get_from_sheet(match_column: list[str], match_value:list):
-    """
-    Retrieve a record from the Google Sheet defined in current_app.db.
-
-    Args:
-        match_column (list[str]): Column names to match (case-insensitive).
-        match_value (list): Values to match in the match_column.
-
-    Returns:
-        dict | None: The matching record as a dictionary, or None if not found.
-    """
-    cfg = current_app.db
-    sheet = cfg.get("sheet")
-    headers = cfg.get("headers")
-
-    if not sheet or not headers:
-        print("❌ Google Sheet or headers missing in configuration")
-        return None
-
-    try:
-        match_rows = find_records(
-            sheet,
-            headers,
-            match_column,
-            match_value,
-        )
-
-        if not match_rows:
-            print(f"❌ No matching record found for {match_column} = {match_value}")
-            return None
-
-        return match_rows
-    except Exception as e:
-        print(f"❌ Failed to retrieve record from Google Sheet: {e}")
-        return None
