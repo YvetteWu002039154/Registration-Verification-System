@@ -24,4 +24,5 @@ dependencies = [
     "langchain-openai>=1.1.0",
     "langchain-core>=1.1.0",
     "langgraph>=1.0.3",
+    "flask-cors>=6.0.1",
 ]
