@@ -122,7 +122,7 @@ def search_nonpaid_email() -> list[dict]:
     return reminder_result
 
 @tool()
-def find_existing_client(client_name: str) -> list[dict] | str:
+def find_existing_client(client_name: str) -> list[dict] | str: # Need to change it to use pr card number incase sensitive info leak, like using name to get pr card number
     """
     Searches for an existing client by their full name in the database.
     

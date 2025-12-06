@@ -53,6 +53,7 @@ def agent_node(state: AgentState):
     messages = state["messages"]
     
     # System Prompt to guide the agent and UI tags
+    # Need to put avoid hallucination and only answer course related instructions here
     system_prompt = SystemMessage(content="""
         You are a helpful Registration Assistant for a course system.
         Your goal is to help users register for courses, validate their identity (PR card), and confirm payment.
